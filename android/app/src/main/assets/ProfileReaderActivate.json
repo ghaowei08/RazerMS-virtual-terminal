@@ -1,0 +1,34 @@
+// #### SDK Version 1.5
+// #### Revision 0.1
+// DO NOT change values in this file
+{"READER_ACTIVATE_PROFILES" : [{
+    "name": "MCTerm-Default",
+    "data": [{
+        "tag": "9F02",
+        "name": "Amount, Authorized (Numeric)"
+    }, {
+        "tag": "9F03",
+        "name": "Amount, Other (Numeric)"
+    }, {
+        "tag": "9F7C",
+        "name": "Merchant Custom Data"
+    }, {
+        "tag": "9F53",
+        "name": "Transaction Category Code"
+    }, {
+        "tag": "5F2A",
+        "name": "Transaction Currency Code"
+    }, {
+        "tag": "5F36",
+        "name": "Transaction Currency Exponent"
+    }, {
+        "tag": "9A",
+        "name": "Transaction Date"
+    }, {
+        "tag": "9F21",
+        "name": "Transaction Time"
+    }, {
+        "tag": "9C",
+        "name": "Transaction Type"
+    }]
+}]}

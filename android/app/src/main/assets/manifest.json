@@ -1,0 +1,21 @@
+// #### SDK Version 1.5
+// #### Revision 0.1
+{
+  "MANIFEST": {
+    // Profiles
+    "readerProfile": "337ce0b8c655328ee4bc4f7aed8690c3f942d954",
+    "readerData": "8697bd4b9d145006faf16c76a66126dcc650d75f",
+    "readerInit": "44FD6B663B8AFD8D7065CBEED571873EDCFF2706",
+    "rederActivate": "1DB0329AB8E772020DFD9B87A7278B07163A8D85",
+    // Data-Dictionaries
+    "v3DataDictionary": "57609D9238B18E760B7D8D94B92F0290017C6497",
+    "terminalDictionary": "6802EDFE167050B7B8C16981056D44FF2B8EBA9D",
+    "referenceTags": "81CE784FD526831F892BB87630CEDF033406EA4A",
+    // Support files
+    "capKeys": "5D29A94597CF7AB7149913BC944F0D5513B67D52",
+    "certificateRevocationList": "DEE94BB1FF4EB0CCA6CDB831E37EA212B467D14B",
+    "defaultTerminalData": "3743fc9818b62124d136ef008950cdb7b91a10e1",
+    "exceptionFile": "6DD53877EE65493A4BA3F55C8F04460D0F18E6BE",
+    "additionalInfo":"49E3D84416739338D195E851EA0D514D5125C6CE"
+  }
+}
