@@ -151,7 +151,7 @@ public class TapCardActivity extends Activity {
                     .setAttestationRefreshInterval(300000L)
                     .setAttestationStrictHttp(true)
                     .setAttestationConnectionTimeout(30000L)
-                    .setLibGoogleApiKey("AIzaSyD9l4ImfUXhDAMz4Df5rdt7gItDy91fXTE")
+                    .setLibGoogleApiKey("")
                     .setLibAccessKey("") // please replace the access key provided by Soft Space
                     .setLibSecretKey("") // please replace the secret key provided by Soft Space
                     .setEnableAttestation(true)
