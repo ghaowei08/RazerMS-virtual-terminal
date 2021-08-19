@@ -22,6 +22,8 @@
 
 -dontnote
 -dontshrink
+-dontoptimize
+-dontpreverify
 -keeppackagenames my.com.softspace.SSMobileMPOSCore.*
 -keeppackagenames my.com.softspace.SSMobileAndroidUtilEngine.*
 -keeppackagenames my.com.softspace.SSMobileUIComponent.*
@@ -165,6 +167,10 @@
     <methods>;
 }
 
+-assumenosideeffects class android.util.Log { *; }
+
+-dontwarn my.com.softspace.auditlog.**
+
 -keep public class sspog.SSPOG{*;}
 -keep public class sspog.SCRPInfo{*;}
 -keep public interface sspog.SCRPAdapter{*;}
@@ -174,3 +180,32 @@
 -keep class com.mastercard.terminalsdk.**$** {*;}
 -keep interface com.mastercard.terminalsdk.** { *; }
 -keep enum com.mastercard.terminalsdk.** { *; }
+
+-keep public class my.com.softspace.reader.internal.kernel.paypass.implementations.resource.** {
+    <fields>;
+    public <methods>;
+}
+
+-keep class com.molpay.** { *; }
+
+-dontwarn common.emv.**
+-keep class common.emv.** {*;}
+-keep class common.emv.**$** {*;}
+-keep interface common.emv.** { *; }
+-keep enum common.emv.** { *; }
+-keeppackagenames common.emv.**
+
+-dontwarn jcb.**
+-keep class jcb.** {*;}
+-keep class jcb.**$** {*;}
+-keep interface jcb.** { *; }
+-keep enum jcb.** { *; }
+-keeppackagenames jcb.**
+
+# Pure
+-dontwarn pure.**
+-keep class pure.** {*;}
+-keep class pure.**$** {*;}
+-keep interface pure.** { *; }
+-keep enum pure.** { *; }
+-keeppackagenames pure.**

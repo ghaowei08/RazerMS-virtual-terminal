@@ -27,7 +27,7 @@ apply plugin: 'kotlin-android-extensions'
 apply from: "$flutterRoot/packages/flutter_tools/gradle/flutter.gradle"
 
 android {
-    compileSdkVersion 28
+    compileSdkVersion 30
 
     sourceSets {
         main.java.srcDirs += 'src/main/kotlin'
@@ -39,11 +39,12 @@ android {
 
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId "com.rms.mobile.fasstap"
-        minSdkVersion 24
-        targetSdkVersion 28
+        applicationId ""
+        minSdkVersion 26
+        targetSdkVersion 30
         versionCode flutterVersionCode.toInteger()
         versionName flutterVersionName
+        multiDexEnabled true
     }
 
     signingConfigs {
@@ -61,18 +62,13 @@ android {
     }
 
     buildTypes {
-//        release {
-//            // TODO: Add your own signing config for the release build.
-//            // Signing with the debug keys for now, so `flutter run --release` works.
-//            signingConfig signingConfigs.debug
-//        }
         debug {
             debuggable true
             minifyEnabled false
             signingConfig signingConfigs.sskey
         }
         release {
-            minifyEnabled false
+            minifyEnabled true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
             signingConfig signingConfigs.sskey
         }
@@ -84,20 +80,23 @@ flutter {
 }
 
 dependencies {
-    implementation fileTree(dir: 'libs', include: ['*.jar', '*.aar'])
-    implementation 'androidx.appcompat:appcompat:1.1.0'
-    implementation 'androidx.constraintlayout:constraintlayout:1.1.3'
+    debugImplementation fileTree(dir: 'libs', include: ['*.aar'], excludes: ['ssmobile-pog-engine-release.aar'])
+    releaseImplementation fileTree(dir: 'libs', include: ['*.aar'], excludes: ['ssmobile-pog-engine-debug.aar'])
+    implementation 'androidx.appcompat:appcompat:1.2.0'
+    implementation 'androidx.constraintlayout:constraintlayout:2.0.4'
     implementation 'junit:junit:4.12'
+    implementation 'com.android.support:multidex:1.0.3'
 
     // SSFasstapSDK dependencies
     implementation 'com.google.android.gms:play-services-safetynet:17.0.0'
     implementation 'com.google.android.gms:play-services-location:17.0.0'
-    implementation 'io.reactivex.rxjava2:rxjava:2.1.14'
-    implementation 'io.reactivex.rxjava2:rxandroid:2.0.2'
-    implementation 'com.squareup.okhttp3:okhttp:3.12.1'
+    implementation 'io.reactivex.rxjava2:rxjava:2.2.19'
+    implementation 'io.reactivex.rxjava2:rxandroid:2.1.1'
+    implementation 'com.squareup.okhttp3:okhttp:3.14.7'
     implementation 'androidx.room:room-runtime:2.2.5'
+    implementation 'androidx.localbroadcastmanager:localbroadcastmanager:1.0.0'
     implementation 'com.jakewharton.timber:timber:4.7.0'
     implementation 'com.google.code.gson:gson:2.8.5'
     implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk7:$kotlin_version"
-    implementation 'androidx.legacy:legacy-support-v4:1.0.0'
+    implementation "androidx.lifecycle:lifecycle-process:2.2.0"
 }

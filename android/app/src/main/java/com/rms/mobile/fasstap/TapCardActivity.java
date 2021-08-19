@@ -1,58 +1,135 @@
 package com.rms.mobile.fasstap;
 
-import android.Manifest;
-import android.app.Activity;
+import android.content.Context;
 import android.content.Intent;
-import android.content.pm.PackageManager;
+import android.graphics.drawable.Animatable;
+import android.media.AudioManager;
 import android.media.MediaPlayer;
+import android.media.ToneGenerator;
 import android.net.Uri;
+import android.nfc.NfcAdapter;
+import android.nfc.NfcManager;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
+import android.os.VibrationEffect;
+import android.os.Vibrator;
 import android.util.Log;
 import android.view.View;
 import android.widget.LinearLayout;
+import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.VideoView;
+import android.widget.ImageView;
+import android.widget.Button;
 
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.core.app.ActivityCompat;
-import androidx.core.content.ContextCompat;
 
-import com.visa.SensoryBrandingCompletionHandler;
-import com.visa.SensoryBrandingView;
-
-import java.io.IOException;
+import org.json.JSONException;
+import org.json.JSONObject;
 
 import my.com.softspace.ssmpossdk.SSMPOSSDK;
-import my.com.softspace.ssmpossdk.SSMPOSSDKConfiguration;
 import my.com.softspace.ssmpossdk.transaction.MPOSTransaction;
 import my.com.softspace.ssmpossdk.transaction.MPOSTransactionOutcome;
 import my.com.softspace.ssmpossdk.transaction.MPOSTransactionParams;
 
+import static com.rms.mobile.fasstap.MainActivity._result;
 import static my.com.softspace.ssmpossdk.transaction.MPOSTransaction.TransactionEvents.TransactionResult.TransactionSuccessful;
 
-public class TapCardActivity extends Activity {
+import java.text.NumberFormat;
+import java.util.Locale;
 
-    private LinearLayout layoutCancelScan;
-    private LinearLayout layoutSensoryBranding;
-    private SensoryBrandingView visaSensoryBranding;
-    private VideoView masterSensoryBranding;
-    private LinearLayout lyScanningEvent;
-    private TextView textViewScanningEvent;
+public class TapCardActivity extends AppCompatActivity {
+
+    private TextView ivUiEvent;
+    private TextView tvAmount;
+    private TextView tvOrderId;
+    private TextView tvCurrency;
+    private TextView tvMaskPanNo;
+    private TextView tvInstruction;
+    private ImageView ivWaveNow;
+    private ImageView ivChecked;
+    private ProgressBar pbWaiting;
+    private Button btnManualInput;
+
+    private String[] instructions;
+
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_tapcard);
+
         Log.d(Constant.TAG,"onCreate invoked");
 
-        layoutSensoryBranding = findViewById(R.id.lySensoryBranding);
-        visaSensoryBranding = findViewById(R.id.sbVisaSensoryBranding);
-        masterSensoryBranding = findViewById(R.id.vvMasterSensoryBranding);
-        layoutCancelScan = findViewById(R.id.lyCancelScan);
-        textViewScanningEvent = findViewById(R.id.tvScanningEvent);
-        lyScanningEvent = findViewById(R.id.lyScanningEvent);
+        ImageView ivCancelScan = findViewById(R.id.cancel_scan_btn);
+        btnManualInput = findViewById(R.id.manual_input_btn);
+        tvAmount = findViewById(R.id.amount_txt);
+        tvOrderId = findViewById(R.id.order_id_txt);
+        tvCurrency = findViewById(R.id.currency_txt);
+        tvMaskPanNo = findViewById(R.id.mask_pan_no_txt);
+        tvInstruction = findViewById(R.id.instruction_txt);
+        ivUiEvent = findViewById(R.id.fasstap_ui_event_txt);
+        ivWaveNow = findViewById(R.id.wave_now);
+        ivChecked = findViewById(R.id.checked);
+        pbWaiting = findViewById(R.id.progressBar);
+
+        ivCancelScan.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                cancelScan();
+            }
+        });
+
+        btnManualInput.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                cancelScan();
+            }
+        });
+
+        NfcManager manager = (NfcManager) getApplicationContext().getSystemService(Context.NFC_SERVICE);
+        NfcAdapter adapter = manager.getDefaultAdapter();
+        if (adapter == null) {
+            try {
+                JSONObject json = new JSONObject();
+                json.put(Constant.OPERATION_CODE, Constant.NFC_NOT_SUPPORTED_CODE);
+                json.put(Constant.OPERATION_MSG, Constant.NFC_NOT_SUPPORTED_DESC);
+                _result.success(json.toString());
+                finish();
+            } catch (JSONException | RuntimeException e) {
+                e.printStackTrace();
+                finish();
+            }
+        } else if (adapter != null && !adapter.isEnabled()) {
+            try {
+                JSONObject json = new JSONObject();
+                json.put(Constant.OPERATION_CODE, Constant.NFC_NOT_ENABLED_CODE);
+                json.put(Constant.OPERATION_MSG, Constant.NFC_NOT_ENABLED_DESC);
+                _result.success(json.toString());
+                finish();
+            } catch (JSONException | RuntimeException e) {
+                e.printStackTrace();
+                finish();
+            }
+        }
+    }
+
+    @Override
+    public void onBackPressed() {
+        Log.d(Constant.TAG,"onBackPressed invoked");
+        SSMPOSSDK.getInstance().getTransaction().abortTransaction();
+
+        try {
+            JSONObject json = new JSONObject();
+            json.put(Constant.OPERATION_CODE, Constant.SCAN_CANCELLED_CODE);
+            json.put(Constant.OPERATION_MSG, Constant.SCAN_CANCELLED_DESC);
+            _result.success(json.toString());
+            finish();
+        } catch (JSONException | RuntimeException e) {
+            e.printStackTrace();
+            finish();
+        }
     }
 
     @Override
@@ -60,7 +137,47 @@ public class TapCardActivity extends Activity {
         super.onStart();
         Log.d(Constant.TAG,"onStart invoked");
 
-        checkLocationPermission();
+        int requestCode = getIntent().getExtras().getInt("requestCode");
+        Log.d(Constant.TAG,"Incoming requestCode: " + requestCode);
+
+        switch (requestCode) {
+            case Constant.REQUEST_CODE_START_SCAN:
+                try {
+                    if(getIntent().getExtras() != null){
+                        NumberFormat formatter = NumberFormat.getCurrencyInstance(Locale.US);
+                        float fAmount = Float.parseFloat(getIntent().getExtras().getString("amount"));
+                        String strAmount = formatter.format(fAmount);
+                        instructions = getIntent().getExtras().getString("instructions").split("\\|");
+                        
+                        tvAmount.setText(strAmount.replaceAll("[$]", ""));
+                        tvOrderId.setText(getIntent().getExtras().getString("orderId"));
+                        tvCurrency.setText(getIntent().getExtras().getString("currency"));
+                        btnManualInput.setText(getIntent().getExtras().getString("cancel"));
+                        tvInstruction.setText(instructions[0]);
+                    }
+                    if (SSMPOSSDK.requestPermissionIfRequired(this, Constant.PERMISSION_REQUEST_PHONE)) {
+                        new Thread() {
+                            @Override
+                            public void run() {
+                                startTransaction();
+                            }
+                        }.start();
+                    }
+                } catch (Exception | Error e) {
+                    e.printStackTrace();
+                    try {
+                        JSONObject json = new JSONObject();
+                        json.put(Constant.OPERATION_CODE, Constant.FATAL_EXCEPTION_CODE);
+                        json.put(Constant.OPERATION_MSG, Constant.FATAL_EXCEPTION_DESC);
+                        _result.success(json.toString());
+                        finish();
+                    } catch (JSONException exp) {
+                        exp.printStackTrace();
+                        finish();
+                    }
+                }
+                break;
+        }
     }
 
     @Override
@@ -84,225 +201,36 @@ public class TapCardActivity extends Activity {
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        Log.d("lifecycle","onDestroy invoked");
+        Log.d(Constant.TAG,"onDestroy invoked");
     }
 
-    @Override
-    public void onRequestPermissionsResult(int resultCode, String[] permissions, int[] grantResult) {
-        super.onRequestPermissionsResult(resultCode, permissions, grantResult);
-
-        switch (resultCode) {
-            case Constant.PERMISSIONS_REQUEST_LOCATION:
-            case Constant.PERMISSION_REQUEST_PHONE:
-                try {
-                    if (grantResult[0] == PackageManager.PERMISSION_GRANTED) {
-                        Log.e(Constant.TAG, "Permission has granted");
-                        initialise();
-                    } else {
-                        Log.e(Constant.TAG, "Permission not granted, can't proceed");
-                        Intent intent = new Intent();
-                        intent.putExtra(Constant.ERROR_CODE, Constant.REQUIRE_PERMISSION_CODE);
-                        intent.putExtra(Constant.ERROR_MSG, Constant.REQUIRE_PERMISSION_DESC);
-                        setResult(Constant.REQUEST_CODE_START_SCAN, intent);
-                        finish();
-                    }
-                } catch(ArrayIndexOutOfBoundsException e) {
-                    Log.e(Constant.TAG, e.getMessage(), e);
-                }
-
-                break;
-        }
-    }
-
-    public void cancelScan(View view) {
+    private void cancelScan() {
         SSMPOSSDK.getInstance().getTransaction().abortTransaction();
 
-        Intent intent = new Intent();
-        intent.putExtra(Constant.ERROR_CODE, Constant.SCAN_CANCELLED_CODE);
-        intent.putExtra(Constant.ERROR_MSG, Constant.SCAN_CANCELLED_DESC);
-        setResult(Constant.REQUEST_CODE_START_SCAN, intent);
-        finish();
-    }
-
-    private void checkLocationPermission() {
-        if (ContextCompat.checkSelfPermission(this,
-                Manifest.permission.ACCESS_FINE_LOCATION)
-                != PackageManager.PERMISSION_GRANTED) {
-
-            ActivityCompat.requestPermissions(TapCardActivity.this,
-                        new String[]{Manifest.permission.ACCESS_FINE_LOCATION},
-                        Constant.PERMISSIONS_REQUEST_LOCATION);
-        }else {
-            initialise();
+        try {
+            JSONObject json = new JSONObject();
+            json.put(Constant.OPERATION_CODE, Constant.SCAN_CANCELLED_CODE);
+            json.put(Constant.OPERATION_MSG, Constant.SCAN_CANCELLED_DESC);
+            _result.success(json.toString());
+            finish();
+        } catch (JSONException  | RuntimeException e) {
+            e.printStackTrace();
+            finish();
         }
     }
 
-    private void initialise() {
+    private void manualInput() {
+        SSMPOSSDK.getInstance().getTransaction().abortTransaction();
 
         try {
-
-            Log.d(Constant.TAG, "Initialising...");
-
-            SSMPOSSDKConfiguration config = SSMPOSSDKConfiguration.Builder
-                    .create()
-                    .setAttestationHost("https://mpos-uat.fasspay.com:9001")
-                    .setAttestationHostCertPinning("sha256/BJlJjxY7OHxhAz6yqy2gm58+qlP0AGwnBHDIG6zkhfU=")
-                    .setAttestationHostReadTimeout(10000L)
-                    .setAttestationRefreshInterval(300000L)
-                    .setAttestationStrictHttp(true)
-                    .setAttestationConnectionTimeout(30000L)
-                    .setLibGoogleApiKey("")
-                    .setLibAccessKey("") // please replace the access key provided by Soft Space
-                    .setLibSecretKey("") // please replace the secret key provided by Soft Space
-                    .setEnableAttestation(true)
-                    .setUniqueID("") // please set the userID shared by Soft Space
-                    .build();
-
-            SSMPOSSDK.init(getApplicationContext(), config);
-
-            Log.d(Constant.TAG,"SDK Version: " + SSMPOSSDK.getInstance().getSdkVersion());
-            Log.d(Constant.TAG,"COTS ID: " + SSMPOSSDK.getInstance().getCotsId());
-
-            if (!SSMPOSSDK.hasRequiredPermission(getApplicationContext())) {
-                SSMPOSSDK.requestPermissionIfRequired(TapCardActivity.this, Constant.PERMISSION_REQUEST_PHONE);
-            } else {
-                refreshToken();
-            }
-        } catch (Exception | Error e) {
+            JSONObject json = new JSONObject();
+            json.put(Constant.OPERATION_CODE, Constant.MANUAL_INPUT_CODE);
+            json.put(Constant.OPERATION_MSG, Constant.MANUAL_INPUT_DESC);
+            _result.success(json.toString());
+            finish();
+        } catch (JSONException  | RuntimeException e) {
             e.printStackTrace();
-        }
-    }
-
-    private void refreshToken() {
-
-        try {
-
-            Log.d(Constant.TAG, "refreshToken()");
-
-            SSMPOSSDK.getInstance().getTransaction().refreshToken(this, new MPOSTransaction.TransactionEvents() {
-
-                @Override
-                public void onTransactionResult(int result, MPOSTransactionOutcome transactionOutcome) {
-                    Log.d(Constant.TAG, "onTransactionResult :: " + result);
-
-                    if(result == TransactionSuccessful) {
-                        Log.d(Constant.TAG, "Run start transaction");
-                        new Handler().postDelayed(new Runnable() {
-
-                            @Override
-                            public void run() {
-                                Log.d(Constant.TAG, "Running..");
-                                startTransaction();
-                            }
-                        }, 3000);
-                    } else {
-                        if(transactionOutcome != null) {
-                            Log.d(Constant.TAG, transactionOutcome.getStatusCode() + " - " + transactionOutcome.getStatusMessage());
-
-                            if (transactionOutcome.getStatusCode().equals(Constant.ERROR_CODE_LOGIN_REQUIRED)) {
-                                Log.d(Constant.TAG, "Login required");
-                                performLogin();
-                            } else if (transactionOutcome.getStatusCode().equals(Constant.ERROR_CODE_ACTIVATION_REQUIRED)) {
-                                Log.d(Constant.TAG, "Activation required");
-                                performActivation();
-                            } else {
-                                Log.d(Constant.TAG, "Unknown Status: " + transactionOutcome.getStatusCode() + " - " + transactionOutcome.getStatusMessage());
-
-                                postFailedResult(transactionOutcome);
-                            }
-                        }
-                    }
-                }
-
-                @Override
-                public void onTransactionUIEvent(int event) {
-                    Log.d(Constant.TAG, "onTransactionUIEvent :: " + event);
-                }
-            });
-        } catch (Exception | Error e){
-            e.printStackTrace();
-        }
-    }
-
-    private void performActivation() {
-
-        try {
-
-            Log.d(Constant.TAG, "performActivation()");
-
-            MPOSTransactionParams transactionalParams = MPOSTransactionParams.Builder.create()
-                .setTempPin("") // temporary pin for activation
-                .setPin("") // new pin to change
-                .setActivationCode("") // activation code for activation
-                .build();
-
-            SSMPOSSDK.getInstance().getTransaction().performActivation(this, transactionalParams, new MPOSTransaction.TransactionEvents() {
-                
-                @Override
-                public void onTransactionResult(int result, MPOSTransactionOutcome transactionOutcome) {
-                    Log.d(Constant.TAG, "onTransactionResult :: " + result);
-
-                    if(result == TransactionSuccessful) {
-                        Log.d(Constant.TAG, "Login required");
-                        performLogin();
-                    } else {
-                        if(transactionOutcome != null) {
-                            Log.d(Constant.TAG, transactionOutcome.getStatusCode() + " - " + transactionOutcome.getStatusMessage());
-
-                            postFailedResult(transactionOutcome);
-                        }
-                    }
-                }
-
-                @Override
-                public void onTransactionUIEvent(int event) {
-                    Log.d(Constant.TAG, "onTransactionUIEvent :: " + event);
-                }
-            });
-        } catch (Exception | Error e) {
-            e.printStackTrace();
-        }
-    }
-
-    private void performLogin() {
-
-        try {
-            Log.d(Constant.TAG, "performLogin()");
-
-            MPOSTransactionParams transactionalParams = MPOSTransactionParams.Builder.create()
-                .setPin("111111")
-                .build();
-
-            SSMPOSSDK.getInstance().getTransaction().performLogin(this, transactionalParams, new MPOSTransaction.TransactionEvents() {
-                
-                @Override
-                public void onTransactionResult(int result, MPOSTransactionOutcome transactionOutcome) {
-
-                    runOnUiThread(new Runnable() {
-                        @Override
-                        public void run() {
-                            Log.d(Constant.TAG, "onTransactionResult :: " + result);
-
-                            if(result == TransactionSuccessful) {
-                                startTransaction();
-                            } else {
-                                if(transactionOutcome != null) {
-                                    Log.d(Constant.TAG, transactionOutcome.getStatusCode() + " - " + transactionOutcome.getStatusMessage());
-
-                                    postFailedResult(transactionOutcome);
-                                }
-                            }
-                        }
-                    });
-                }
-
-                @Override
-                public void onTransactionUIEvent(int event) {
-                    Log.d(Constant.TAG, "onTransactionUIEvent :: " + event);
-                }
-            });
-        } catch (Exception | Error e) {
-            e.printStackTrace();
+            finish();
         }
     }
 
@@ -311,63 +239,164 @@ public class TapCardActivity extends Activity {
         try {
             Log.d(Constant.TAG, "startTransaction()");
 
+            String amount = tvAmount.getText().toString();
+            amount = amount.replaceAll("[$,.]", "");
+            Log.d(Constant.TAG, "amount :: " + amount);
+
             MPOSTransactionParams transactionalParams = MPOSTransactionParams.Builder.create()
-                .setAmount("100")
-                .build();
+                    .setAmount(amount)
+                    .build();
 
             SSMPOSSDK.getInstance().getTransaction().startTransaction(this, transactionalParams, new MPOSTransaction.TransactionEvents() {
-                
+
                 @Override
                 public void onTransactionResult(int result, MPOSTransactionOutcome transactionOutcome) {
 
-                    if(result == TransactionSuccessful) {
-                        String outcome = "Transaction ID :: " + transactionOutcome.getTransactionID() + "\n";
-                        outcome += "Approval code :: " + transactionOutcome.getApprovalCode() + "\n";
-                        outcome += "Card number :: " + transactionOutcome.getCardNo() + "\n";
-                        outcome += "Cardholder name :: " + transactionOutcome.getCardHolderName() + "\n";
-                        Log.d(Constant.TAG, outcome);
+                    Log.d(Constant.TAG, "onTransactionResult :: " + result);
 
-                        if(Constant.CARD_TYPE_VISA.equals(transactionOutcome.getCardType())) {
-                            animateVisaSensoryBranding(transactionOutcome);
-                        } else if(Constant.CARD_TYPE_MASTER.equals(transactionOutcome.getCardType())) {
-                            animateMasterSensoryBranding(transactionOutcome);
-                        } else if(Constant.CARD_TYPE_DEBIT.equals(transactionOutcome.getCardType())) {
+                    runOnUiThread(new Runnable() {
 
+                        @Override
+                        public void run() {
+
+                            if(result == TransactionSuccessful) {
+                                String outcome = "Status Code :: " + transactionOutcome.getStatusCode() + "\n";
+                                outcome += "Status Message :: " + transactionOutcome.getStatusMessage() + "\n";
+                                outcome += "Approval Code :: " + transactionOutcome.getApprovalCode() + "\n";
+                                outcome += "Transaction ID :: " + transactionOutcome.getTransactionID() + "\n";
+                                outcome += "Card No :: " + transactionOutcome.getCardNo() + "\n";
+                                outcome += "Card Type :: " + transactionOutcome.getCardType() + "\n";
+                                outcome += "Cardholder Name :: " + transactionOutcome.getCardHolderName() + "\n";
+                                outcome += "Reference No :: " + transactionOutcome.getReferenceNo() + "\n";
+                                outcome += "Acquirer ID :: " + transactionOutcome.getAcquirerID() + "\n";
+                                outcome += "Application Cryptogram :: " + transactionOutcome.getApplicationCryptogram() + "\n";
+                                outcome += "Terminal Verification Results :: " + transactionOutcome.getTerminalVerificationResults() + "\n";
+                                outcome += "Transaction Status Info :: " + transactionOutcome.getTransactionStatusInfo() + "\n";
+                                outcome += "Merchant Identifier :: " + transactionOutcome.getMerchantIdentifier() + "\n";
+                                outcome += "Terminal Identifier :: " + transactionOutcome.getTerminalIdentifier() + "\n";
+                                outcome += "Application ID :: " + transactionOutcome.getAid() + "\n";
+                                outcome += "Invoice No :: " + transactionOutcome.getInvoiceNo() + "\n";
+                                outcome += "Contactless CVM Type :: " + transactionOutcome.getContactlessCVMType();
+                                Log.d(Constant.TAG, outcome);
+
+                                tvMaskPanNo.setText(transactionOutcome.getCardNo());
+                                ivUiEvent.setText(transactionOutcome.getStatusMessage());
+                                ivUiEvent.setText(instructions[7]);
+                                pbWaiting.setVisibility(View.GONE);
+                                ivChecked.setVisibility(View.VISIBLE);
+                                ((Animatable) ivChecked.getDrawable()).start();
+
+                                try {
+                                    JSONObject json = new JSONObject();
+                                    json.put(Constant.OPERATION_CODE, Constant.SUCCESSFULLY_SCAN_CODE);
+                                    json.put(Constant.OPERATION_MSG, Constant.SUCCESSFULLY_SCAN_DESC);
+                                    json.put(Constant.STATUS_CODE, transactionOutcome.getStatusCode());
+                                    json.put(Constant.STATUS_MESSAGE, transactionOutcome.getStatusMessage());
+                                    json.put(Constant.APPROVAL_CODE, transactionOutcome.getApprovalCode());
+                                    json.put(Constant.TRANSACTION_ID, transactionOutcome.getTransactionID());
+                                    json.put(Constant.CARD_NO, transactionOutcome.getCardNo());
+                                    json.put(Constant.CARD_TYPE, transactionOutcome.getCardType());
+                                    json.put(Constant.CARDHOLDER_NAME, transactionOutcome.getCardHolderName());
+                                    json.put(Constant.REFERENCE_NO, transactionOutcome.getReferenceNo());
+                                    json.put(Constant.ACQUIRER_ID, transactionOutcome.getAcquirerID());
+                                    json.put(Constant.APPLICATION_CRYPTOGRAM, transactionOutcome.getApplicationCryptogram());
+                                    json.put(Constant.TERMINAL_VERIFICATION_RESULTS, transactionOutcome.getTerminalVerificationResults());
+                                    json.put(Constant.TRANSACTION_STATUS_INFO, transactionOutcome.getTransactionStatusInfo());
+                                    json.put(Constant.MERCHANT_IDENTIFIER, transactionOutcome.getMerchantIdentifier());
+                                    json.put(Constant.TERMINAL_IDENTIFIER, transactionOutcome.getTerminalIdentifier());
+                                    json.put(Constant.AID, transactionOutcome.getAid());
+                                    json.put(Constant.INVOICE_NO, transactionOutcome.getInvoiceNo());
+                                    json.put(Constant.CONTACTLESS_CVM_TYPE, transactionOutcome.getContactlessCVMType());
+                                    _result.success(json.toString());
+                                    finish();
+                                } catch (JSONException | RuntimeException e) {
+                                    e.printStackTrace();
+                                    finish();
+                                }
+                                // new Handler().postDelayed(new Runnable() {
+                                //     @Override
+                                //     public void run() {
+                                //         finish();
+                                //     }
+                                // }, 1000);
+                            } else {
+                                if(transactionOutcome != null) {
+                                    Log.d(Constant.TAG, transactionOutcome.getStatusCode() + " - " + transactionOutcome.getStatusMessage());
+
+                                    try {
+                                        JSONObject json = new JSONObject();
+                                        json.put(Constant.OPERATION_CODE, Constant.SCAN_FAILURE_CODE);
+                                        json.put(Constant.OPERATION_MSG, Constant.SCAN_FAILURE_DESC);
+                                        json.put(Constant.STATUS_MESSAGE, transactionOutcome.getStatusMessage());
+                                        json.put(Constant.STATUS_CODE, transactionOutcome.getStatusCode());
+                                        _result.success(json.toString());
+                                        finish();
+                                    } catch (JSONException | RuntimeException e) {
+                                        e.printStackTrace();
+                                        finish();
+                                    }
+                                }
+                            }
                         }
-                    } else {
-                        if(transactionOutcome != null) {
-                            Log.d(Constant.TAG, transactionOutcome.getStatusCode() + " - " + transactionOutcome.getStatusMessage());
+                    });
 
-                            postFailedResult(transactionOutcome);
-                        }
-                    }
                 }
 
                 @Override
                 public void onTransactionUIEvent(int event) {
                     Log.d(Constant.TAG, "onTransactionUIEvent :: " + event);
                     runOnUiThread(() -> {
-                        layoutCancelScan.setVisibility(View.VISIBLE);
-                        lyScanningEvent.setVisibility(View.VISIBLE);
 
+                        JSONObject json = new JSONObject();
                         switch (event) {
                             case TransactionUIEvent.PresentCard:
-                                textViewScanningEvent.setText("Please tap your card here");
+                                ivUiEvent.setText(instructions[1]);
                                 break;
                             case TransactionUIEvent.CardPresented:
-                                textViewScanningEvent.setText("Card detected");
+                                ivWaveNow.setVisibility(View.GONE);
+                                pbWaiting.setVisibility(View.VISIBLE);
+                                ivUiEvent.setText(instructions[2]);
                                 break;
                             case TransactionUIEvent.Authorising:
-                                textViewScanningEvent.setText("Authorising");
+                                ivUiEvent.setText(instructions[3]);
                                 break;
                             case TransactionUIEvent.PresentCardTimeout:
-                                textViewScanningEvent.setText("Time out");
+                                ivWaveNow.setVisibility(View.VISIBLE);
+                                pbWaiting.setVisibility(View.GONE);
+                                ivUiEvent.setText(instructions[4]);
+                                try {
+                                    json.put(Constant.OPERATION_CODE, Constant.TIME_OUT_CODE);
+                                    json.put(Constant.OPERATION_MSG, Constant.TIME_OUT_DESC);
+                                    _result.success(json.toString());
+                                    finish();
+                                } catch (JSONException | RuntimeException e) {
+                                    e.printStackTrace();
+                                    finish();
+                                }
                                 break;
                             case TransactionUIEvent.CardReadOk:
-                                textViewScanningEvent.setText("Read card OK");
+                                ivUiEvent.setText(instructions[5]);
+                                // you may customize card reads OK sound & vibration, below is some example
+                                ToneGenerator toneGenerator = new ToneGenerator(AudioManager.STREAM_MUSIC, ToneGenerator.MAX_VOLUME);
+                                toneGenerator.startTone(ToneGenerator.TONE_DTMF_P, 500);
+
+                                Vibrator v = (Vibrator) TapCardActivity.this.getSystemService(Context.VIBRATOR_SERVICE);
+                                if (v.hasVibrator())
+                                {
+                                    v.vibrate(VibrationEffect.createOneShot(200, VibrationEffect.DEFAULT_AMPLITUDE));
+                                }
                                 break;
                             case TransactionUIEvent.CardReadError:
-                                textViewScanningEvent.setText("Read card error");
+                                ivUiEvent.setText(instructions[6]);
+                                try {
+                                    json.put(Constant.OPERATION_CODE, Constant.SCAN_FAILURE_CODE);
+                                    json.put(Constant.OPERATION_MSG, Constant.SCAN_FAILURE_DESC);
+                                    _result.success(json.toString());
+                                    finish();
+                                } catch (JSONException | RuntimeException e) {
+                                    e.printStackTrace();
+                                    finish();
+                                }
                                 break;
                             case TransactionUIEvent.Unknown:
                             case TransactionUIEvent.CancelPin:
@@ -376,6 +405,15 @@ public class TapCardActivity extends Activity {
                             case TransactionUIEvent.PinEnterTimeout:
                             case TransactionUIEvent.PinEntered:
                             case TransactionUIEvent.RequestSignature:
+                                try {
+                                    json.put(Constant.OPERATION_CODE, Constant.UNHANDLED_EVENT_CODE);
+                                    json.put(Constant.OPERATION_MSG, Constant.UNHANDLED_EVENT_DESC);
+                                    _result.success(json.toString());
+                                    finish();
+                                } catch (JSONException | RuntimeException e) {
+                                    e.printStackTrace();
+                                    finish();
+                                }
                                 break;
                         }
 
@@ -383,82 +421,19 @@ public class TapCardActivity extends Activity {
                 }
             });
 
-        } catch (Exception e) {
+        } catch (Exception | Error e) {
             e.printStackTrace();
+            try {
+                JSONObject json = new JSONObject();
+                json.put(Constant.OPERATION_CODE, Constant.FATAL_EXCEPTION_CODE);
+                json.put(Constant.OPERATION_MSG, Constant.FATAL_EXCEPTION_DESC);
+                _result.success(json.toString());
+                finish();
+            } catch (JSONException | RuntimeException exception) {
+                exception.printStackTrace();
+                finish();
+            }
         }
     }
 
-    private void animateVisaSensoryBranding(MPOSTransactionOutcome transactionOutcome) {
-
-        layoutSensoryBranding.setVisibility(View.VISIBLE);
-        visaSensoryBranding.setVisibility(View.VISIBLE);
-
-        visaSensoryBranding.setBackdropColor(-1);
-        visaSensoryBranding.setConstrainedFlags(false);
-        visaSensoryBranding.setSoundEnabled(true);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.CUPCAKE) {
-            visaSensoryBranding.setHapticFeedbackEnabled(true);
-        }
-        visaSensoryBranding.setCheckMarkShown(true);
-
-        new Handler().postDelayed(new Runnable() {
-
-            @Override
-            public void run() {
-                visaSensoryBranding.animate(new SensoryBrandingCompletionHandler() {
-
-                    @Override
-                    public void onComplete(Error error) {
-                        visaSensoryBranding.setVisibility(View.GONE);
-                        layoutSensoryBranding.setVisibility(View.GONE);
-                        postSuccessResult(transactionOutcome);
-                    }
-                });
-            }
-        }, 100);
-    }
-
-    private void animateMasterSensoryBranding(MPOSTransactionOutcome transactionOutcome) {
-        layoutSensoryBranding.setVisibility(View.VISIBLE);
-        masterSensoryBranding.setVisibility(View.VISIBLE);
-
-        String path = "android.resource://" + getPackageName() + "/" + R.raw.mc_sensory_transaction;
-        masterSensoryBranding.setVideoURI(Uri.parse(path));
-        masterSensoryBranding.start();
-        masterSensoryBranding.setOnCompletionListener(new MediaPlayer.OnCompletionListener() {
-
-            @Override
-            public void onCompletion(MediaPlayer mp) {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.FROYO) {
-                    masterSensoryBranding.suspend();
-                }
-                masterSensoryBranding.setVisibility(View.GONE);
-                layoutSensoryBranding.setVisibility(View.GONE);
-                postSuccessResult(transactionOutcome);
-            }
-        });
-
-    }
-
-    private void postSuccessResult(MPOSTransactionOutcome transactionOutcome){
-        Intent intent = new Intent();
-        intent.putExtra(Constant.STATUS_CODE, transactionOutcome.getStatusCode());
-        intent.putExtra(Constant.STATUS_MESSAGE, transactionOutcome.getStatusMessage());
-        intent.putExtra(Constant.APPROVAL_CODE, transactionOutcome.getApprovalCode());
-        intent.putExtra(Constant.TRANSACTION_ID, transactionOutcome.getTransactionID());
-        intent.putExtra(Constant.CARD_NO, transactionOutcome.getCardNo());
-        intent.putExtra(Constant.CARD_TYPE, transactionOutcome.getCardType());
-        intent.putExtra(Constant.CARDHOLDER_NAME, transactionOutcome.getCardHolderName());
-        intent.putExtra(Constant.REFERENCE_NO, transactionOutcome.getReferenceNo());
-        setResult(Constant.REQUEST_CODE_START_SCAN, intent);
-        finish();
-    }
-
-    private void postFailedResult(MPOSTransactionOutcome transactionOutcome){
-        Intent intent = new Intent();
-        intent.putExtra(Constant.ERROR_CODE, transactionOutcome.getStatusCode());
-        intent.putExtra(Constant.ERROR_MSG, transactionOutcome.getStatusMessage());
-        setResult(Constant.REQUEST_CODE_START_SCAN, intent);
-        finish();
-    }
 }
