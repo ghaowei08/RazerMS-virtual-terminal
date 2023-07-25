@@ -13,7 +13,7 @@
 
     <application
         tools:replace="android:label"
-        android:name="io.flutter.app.FlutterApplication"
+        android:name="${applicationName}"
         android:label="fasstap"
         android:icon="@mipmap/ic_launcher">
         <activity
